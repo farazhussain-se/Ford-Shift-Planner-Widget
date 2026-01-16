@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ford Shift Planner Widget</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #e0e7ef 0%, #f5f7fa 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideUp {
+            from { 
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to { 
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% { 
+                transform: scale(1);
+                opacity: 1;
+            }
+            50% { 
+                transform: scale(1.1);
+                opacity: 0.8;
+            }
+        }
+
+        @keyframes scaleIn {
+            from { 
+                transform: scale(0);
+            }
+            to { 
+                transform: scale(1);
+            }
+        }
+
+        @keyframes ripple {
+            0% {
+                transform: scale(0);
+                opacity: 1;
+            }
+            100% {
+                transform: scale(2);
+                opacity: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState } = React;
+
+        // Lucide Icons as React Components
+        const Calendar = ({ size = 24, color = 'currentColor', ...props }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+        );
+
+        const Clock = ({ size = 24, color = 'currentColor', ...props }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+        );
+
+        const RefreshCw = ({ size = 24, color = 'currentColor', ...props }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+        );
+
+        const Check = ({ size = 24, color = 'currentColor', ...props }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+                <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+        );
+
+        const ArrowLeft = ({ size = 24, color = 'currentColor', ...props }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+                <line x1="19" y1="12" x2="5" y2="12"></line>
+                <polyline points="12 19 5 12 12 5"></polyline>
+            </svg>
+        );
+
+        const Users = ({ size = 24, color = 'currentColor', ...props }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+        );
+
+        const AlertCircle = ({ size = 24, color = 'currentColor', ...props }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+        );
+
+        const ShiftPlannerWidget = () => {
+            const [activeTab, setActiveTab] = useState('myShifts');
+            const [currentScreen, setCurrentScreen] = useState('main');
+            const [selectedShift, setSelectedShift] = useState(null);
+            const [swapRequests, setSwapRequests] = useState([]);
+
+            // Ford Brand Colors
+            const fordBlue = '#00274C';
+            const fordLightBlue = '#0076CE';
+            const fordGray = '#505759';
+            const fordLightGray = '#E5E5E5';
+
+            const shifts = [
+                { id: 1, day: 'Mon, Jan 13', time: '6:00 AM - 2:00 PM', line: 'Line 4', confirmed: true },
+                { id: 2, day: 'Tue, Jan 14', time: '6:00 AM - 2:00 PM', line: 'Line 4', confirmed: true },
+                { id: 3, day: 'Wed, Jan 15', time: '6:00 AM - 2:00 PM', line: 'Line 4', confirmed: true },
+                { id: 4, day: 'Thu, Jan 16', time: '6:00 AM - 2:00 PM', line: 'Line 4', confirmed: true },
+                { id: 5, day: 'Fri, Jan 17', time: '6:00 AM - 2:00 PM', line: 'Line 4', confirmed: true },
+            ];
+
+            const availableShifts = [
+                { id: 6, day: 'Sat, Jan 18', time: '2:00 PM - 10:00 PM', line: 'Line 2', postedBy: 'John Smith' },
+                { id: 7, day: 'Sun, Jan 19', time: '10:00 PM - 6:00 AM', line: 'Line 3', postedBy: 'Sarah Johnson' },
+            ];
+
+            const handleRequestSwap = (shift) => {
+                setSelectedShift(shift);
+                setCurrentScreen('swapRequest');
+            };
+
+            const handlePickupShift = (shift) => {
+                setSelectedShift(shift);
+                setCurrentScreen('pickupConfirm');
+            };
+
+            const confirmSwap = () => {
+                setSwapRequests([...swapRequests, { ...selectedShift, status: 'pending' }]);
+                setCurrentScreen('swapSuccess');
+                setTimeout(() => setCurrentScreen('main'), 2000);
+            };
+
+            const styles = {
+                container: {
+                    fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif",
+                    maxWidth: '540px',
+                    margin: '0 auto',
+                    backgroundColor: '#F8F9FA',
+                    borderRadius: '12px',
+                    overflow: 'hidden',
+                    boxShadow: '0 4px 20px rgba(0, 39, 76, 0.1)',
+                },
+                header: {
+                    background: `linear-gradient(135deg, ${fordBlue} 0%, ${fordLightBlue} 100%)`,
+                    padding: '24px 20px',
+                    color: 'white',
+                },
+                headerTitle: {
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    fontSize: '24px',
+                    fontWeight: '600',
+                    marginBottom: '6px',
+                },
+                headerSubtitle: {
+                    fontSize: '14px',
+                    opacity: '0.9',
+                    marginLeft: '40px',
+                },
+                tabContainer: {
+                    display: 'flex',
+                    gap: '12px',
+                    padding: '16px 20px',
+                    backgroundColor: 'white',
+                    borderBottom: `2px solid ${fordLightGray}`,
+                },
+                tab: {
+                    flex: 1,
+                    padding: '12px 20px',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '15px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    position: 'relative',
+                    overflow: 'hidden',
+                },
+                tabActive: {
+                    backgroundColor: fordLightBlue,
+                    color: 'white',
+                    transform: 'translateY(-2px)',
+                    boxShadow: '0 4px 12px rgba(0, 118, 206, 0.3)',
+                },
+                tabInactive: {
+                    backgroundColor: fordLightGray,
+                    color: fordGray,
+                },
+                content: {
+                    padding: '20px',
+                    minHeight: '400px',
+                },
+                shiftCard: {
+                    backgroundColor: 'white',
+                    borderRadius: '12px',
+                    padding: '20px',
+                    marginBottom: '16px',
+                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
+                    transition: 'all 0.3s ease',
+                    cursor: 'pointer',
+                    position: 'relative',
+                    overflow: 'hidden',
+                },
+                shiftCardHover: {
+                    transform: 'translateY(-4px)',
+                    boxShadow: '0 6px 20px rgba(0, 0, 0, 0.12)',
+                },
+                shiftHeader: {
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '12px',
+                },
+                shiftDay: {
+                    fontSize: '18px',
+                    fontWeight: '600',
+                    color: fordBlue,
+                },
+                confirmedBadge: {
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '50%',
+                    backgroundColor: '#10B981',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    animation: 'pulse 2s ease-in-out infinite',
+                },
+                shiftTime: {
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    color: fordGray,
+                    fontSize: '14px',
+                    marginBottom: '8px',
+                },
+                shiftLine: {
+                    color: fordGray,
+                    fontSize: '14px',
+                    marginBottom: '12px',
+                },
+                requestButton: {
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    padding: '10px 16px',
+                    backgroundColor: 'transparent',
+                    color: fordLightBlue,
+                    border: `2px solid ${fordLightBlue}`,
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    width: '100%',
+                },
+                requestButtonHover: {
+                    backgroundColor: fordLightBlue,
+                    color: 'white',
+                    transform: 'scale(1.02)',
+                },
+                modalOverlay: {
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1000,
+                    animation: 'fadeIn 0.3s ease',
+                },
+                modal: {
+                    backgroundColor: 'white',
+                    borderRadius: '16px',
+                    padding: '30px',
+                    maxWidth: '400px',
+                    width: '90%',
+                    boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+                    animation: 'slideUp 0.3s ease',
+                },
+                modalHeader: {
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    marginBottom: '20px',
+                },
+                modalTitle: {
+                    fontSize: '20px',
+                    fontWeight: '600',
+                    color: fordBlue,
+                },
+                modalContent: {
+                    marginBottom: '24px',
+                },
+                modalLabel: {
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    color: fordGray,
+                    marginBottom: '8px',
+                    display: 'block',
+                },
+                modalValue: {
+                    fontSize: '16px',
+                    color: fordBlue,
+                    marginBottom: '16px',
+                },
+                modalButtons: {
+                    display: 'flex',
+                    gap: '12px',
+                },
+                modalButton: {
+                    flex: 1,
+                    padding: '12px 20px',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '15px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                },
+                primaryButton: {
+                    backgroundColor: fordLightBlue,
+                    color: 'white',
+                },
+                secondaryButton: {
+                    backgroundColor: fordLightGray,
+                    color: fordGray,
+                },
+                successScreen: {
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '60px 20px',
+                    textAlign: 'center',
+                },
+                successIcon: {
+                    width: '80px',
+                    height: '80px',
+                    borderRadius: '50%',
+                    backgroundColor: '#10B981',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: '24px',
+                    animation: 'scaleIn 0.5s ease',
+                },
+                successTitle: {
+                    fontSize: '24px',
+                    fontWeight: '600',
+                    color: fordBlue,
+                    marginBottom: '12px',
+                },
+                successMessage: {
+                    fontSize: '16px',
+                    color: fordGray,
+                },
+                availableShiftCard: {
+                    backgroundColor: 'white',
+                    borderRadius: '12px',
+                    padding: '20px',
+                    marginBottom: '16px',
+                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
+                    transition: 'all 0.3s ease',
+                    borderLeft: `4px solid ${fordLightBlue}`,
+                },
+                postedBy: {
+                    fontSize: '13px',
+                    color: fordGray,
+                    marginTop: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                },
+                badge: {
+                    display: 'inline-block',
+                    padding: '4px 12px',
+                    borderRadius: '12px',
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    marginTop: '8px',
+                },
+                availableBadge: {
+                    backgroundColor: '#E0F2FE',
+                    color: fordLightBlue,
+                },
+                textArea: {
+                    width: '100%',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    border: `2px solid ${fordLightGray}`,
+                    fontSize: '14px',
+                    fontFamily: 'inherit',
+                    minHeight: '80px',
+                    resize: 'vertical',
+                    boxSizing: 'border-box',
+                },
+                warningBox: {
+                    padding: '12px',
+                    backgroundColor: '#FEF3C7',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    color: '#92400E',
+                },
+                emptyState: {
+                    textAlign: 'center',
+                    padding: '60px 20px',
+                    color: fordGray,
+                },
+            };
+
+            const ShiftCard = ({ shift, onAction, actionLabel, isAvailable }) => {
+                const [isHovered, setIsHovered] = useState(false);
+
+                return (
+                    <div
+                        style={{
+                            ...styles.shiftCard,
+                            ...(isAvailable ? styles.availableShiftCard : {}),
+                            ...(isHovered ? styles.shiftCardHover : {}),
+                        }}
+                        onMouseEnter={() => setIsHovered(true)}
+                        onMouseLeave={() => setIsHovered(false)}
+                    >
+                        <div style={styles.shiftHeader}>
+                            <span style={styles.shiftDay}>{shift.day}</span>
+                            {shift.confirmed && (
+                                <div style={styles.confirmedBadge}>
+                                    <Check size={16} color="white" />
+                                </div>
+                            )}
+                        </div>
+                        <div style={styles.shiftTime}>
+                            <Clock size={16} />
+                            {shift.time}
+                        </div>
+                        <div style={styles.shiftLine}>{shift.line}</div>
+                        {shift.postedBy && (
+                            <div style={styles.postedBy}>
+                                <Users size={14} />
+                                Posted by {shift.postedBy}
+                            </div>
+                        )}
+                        {isAvailable && (
+                            <span style={{ ...styles.badge, ...styles.availableBadge }}>
+                                Available to Pick Up
+                            </span>
+                        )}
+                        <button
+                            style={{
+                                ...styles.requestButton,
+                                ...(isHovered ? styles.requestButtonHover : {}),
+                            }}
+                            onClick={() => onAction(shift)}
+                        >
+                            <RefreshCw size={16} />
+                            {actionLabel}
+                        </button>
+                    </div>
+                );
+            };
+
+            const renderContent = () => {
+                if (currentScreen === 'swapRequest') {
+                    return (
+                        <div style={styles.modalOverlay} onClick={() => setCurrentScreen('main')}>
+                            <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+                                <div style={styles.modalHeader}>
+                                    <AlertCircle size={24} color={fordLightBlue} />
+                                    <span style={styles.modalTitle}>Request Shift Swap</span>
+                                </div>
+                                <div style={styles.modalContent}>
+                                    <label style={styles.modalLabel}>Current Shift:</label>
+                                    <div style={styles.modalValue}>
+                                        {selectedShift?.day}<br />
+                                        {selectedShift?.time}<br />
+                                        {selectedShift?.line}
+                                    </div>
+                                    <label style={styles.modalLabel}>Swap Reason (Optional):</label>
+                                    <textarea
+                                        style={styles.textArea}
+                                        placeholder="Enter reason for swap request..."
+                                    />
+                                </div>
+                                <div style={styles.modalButtons}>
+                                    <button
+                                        style={{ ...styles.modalButton, ...styles.secondaryButton }}
+                                        onClick={() => setCurrentScreen('main')}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        style={{ ...styles.modalButton, ...styles.primaryButton }}
+                                        onClick={confirmSwap}
+                                    >
+                                        Submit Request
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                }
+
+                if (currentScreen === 'swapSuccess') {
+                    return (
+                        <div style={styles.successScreen}>
+                            <div style={styles.successIcon}>
+                                <Check size={48} color="white" />
+                            </div>
+                            <h3 style={styles.successTitle}>Request Submitted!</h3>
+                            <p style={styles.successMessage}>
+                                Your swap request has been sent to your supervisor for approval.
+                            </p>
+                        </div>
+                    );
+                }
+
+                if (currentScreen === 'pickupConfirm') {
+                    return (
+                        <div style={styles.modalOverlay} onClick={() => setCurrentScreen('main')}>
+                            <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+                                <div style={styles.modalHeader}>
+                                    <Calendar size={24} color={fordLightBlue} />
+                                    <span style={styles.modalTitle}>Pick Up Shift</span>
+                                </div>
+                                <div style={styles.modalContent}>
+                                    <label style={styles.modalLabel}>Shift Details:</label>
+                                    <div style={styles.modalValue}>
+                                        {selectedShift?.day}<br />
+                                        {selectedShift?.time}<br />
+                                        {selectedShift?.line}<br />
+                                        <span style={{ fontSize: '14px', color: fordGray }}>
+                                            Posted by {selectedShift?.postedBy}
+                                        </span>
+                                    </div>
+                                    <div style={styles.warningBox}>
+                                        This will be added to your schedule immediately.
+                                    </div>
+                                </div>
+                                <div style={styles.modalButtons}>
+                                    <button
+                                        style={{ ...styles.modalButton, ...styles.secondaryButton }}
+                                        onClick={() => setCurrentScreen('main')}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        style={{ ...styles.modalButton, ...styles.primaryButton }}
+                                        onClick={() => {
+                                            setCurrentScreen('main');
+                                        }}
+                                    >
+                                        Confirm Pickup
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                }
+
+                return (
+                    <div style={styles.content}>
+                        {activeTab === 'myShifts' ? (
+                            <>
+                                {shifts.map((shift) => (
+                                    <ShiftCard
+                                        key={shift.id}
+                                        shift={shift}
+                                        onAction={handleRequestSwap}
+                                        actionLabel="Request Swap"
+                                    />
+                                ))}
+                            </>
+                        ) : (
+                            <>
+                                {availableShifts.map((shift) => (
+                                    <ShiftCard
+                                        key={shift.id}
+                                        shift={shift}
+                                        onAction={handlePickupShift}
+                                        actionLabel="Pick Up Shift"
+                                        isAvailable
+                                    />
+                                ))}
+                                {availableShifts.length === 0 && (
+                                    <div style={styles.emptyState}>
+                                        <Calendar size={48} style={{ marginBottom: '16px', opacity: 0.5 }} />
+                                        <p>No available shifts at the moment</p>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+                );
+            };
+
+            return (
+                <div style={styles.container}>
+                    <div style={styles.header}>
+                        <div style={styles.headerTitle}>
+                            <Calendar size={28} />
+                            <span>Shift Planner</span>
+                        </div>
+                        <div style={styles.headerSubtitle}>Manage your schedule</div>
+                    </div>
+
+                    <div style={styles.tabContainer}>
+                        <button
+                            style={{
+                                ...styles.tab,
+                                ...(activeTab === 'myShifts' ? styles.tabActive : styles.tabInactive),
+                            }}
+                            onClick={() => setActiveTab('myShifts')}
+                        >
+                            My Shifts
+                        </button>
+                        <button
+                            style={{
+                                ...styles.tab,
+                                ...(activeTab === 'available' ? styles.tabActive : styles.tabInactive),
+                            }}
+                            onClick={() => setActiveTab('available')}
+                        >
+                            Available ({availableShifts.length})
+                        </button>
+                    </div>
+
+                    {renderContent()}
+                </div>
+            );
+        };
+
+        // Render the app
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<ShiftPlannerWidget />);
+    </script>
+</body>
+</html>
